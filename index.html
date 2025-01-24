@@ -400,9 +400,15 @@
 
         // Load POIs if in range
         async function loadPOIsIfInRange(currentPosition) {
-            if (!initialPosition) return;
+            console.log('Loading POIs for position:', currentPosition);
+            if (!currentPosition) return;
 
-            const loading = document.getElementById('loading');
+            isInLoadingArea = true;
+            const loading = document.createElement('div');
+            loading.id = 'loading';
+            loading.className = 'loading-overlay';
+            loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding nearby bars...';
+            document.body.appendChild(loading);
             loading.style.display = 'block';
             
             try {
