@@ -170,22 +170,36 @@
             display: none;
         }
 
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: var(--bg-primary);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--bg-secondary);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent);
+        @media (max-width: 768px) {
+            #map {
+                margin-left: 0;
+                height: calc(100vh - 60px);
+                width: 100%;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 60px;
+                bottom: 0;
+                top: auto;
+                padding: 10px;
+                overflow: hidden;
+                transition: height 0.3s;
+            }
+            
+            .sidebar.expanded {
+                height: 80vh;
+                overflow-y: auto;
+            }
+            
+            .toggle-sidebar {
+                left: 10px !important;
+                top: 70px;
+            }
+            
+            .legend {
+                bottom: 70px;
+            }
         }
     </style>
 </head>
@@ -508,7 +522,7 @@
         const toggleButton = document.getElementById('toggle-sidebar');
 
         toggleButton.addEventListener('click', () => {
-            sidebar.classList.toggle('collapsed');
+            sidebar.classList.toggle('expanded');
             mapDiv.classList.toggle('map-collapsed');
             toggleButton.classList.toggle('collapsed');
             map.invalidateSize();
