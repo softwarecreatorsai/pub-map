@@ -44,11 +44,14 @@
             padding: 24px;
             box-sizing: border-box;
             overflow-y: auto;
+            transition: all 0.3s ease;
+            z-index: 1000;
         }
 
         .sidebar h2 {
             color: var(--accent);
             margin: 0 0 24px 0;
+            font-size: 24px;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -103,6 +106,10 @@
             color: var(--text-secondary);
         }
 
+        .poi-list {
+            margin-top: 20px;
+        }
+
         .poi-item {
             background: var(--bg-secondary);
             padding: 16px;
@@ -129,18 +136,29 @@
             color: var(--text-secondary);
         }
 
-        .toggle-sidebar {
+        .loading-overlay {
             position: fixed;
-            left: 400px;
-            top: 20px;
-            z-index: 1001;
-            background: var(--bg-primary);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 26, 26, 0.9);
             color: var(--text-primary);
-            border: none;
-            padding: 12px;
-            cursor: pointer;
-            border-radius: 0 4px 4px 0;
-            box-shadow: 4px 0 8px rgba(0,0,0,0.2);
+            padding: 24px 48px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .error-message {
+            background: var(--danger);
+            color: var(--text-primary);
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+            display: none;
         }
 
         .legend {
@@ -161,13 +179,11 @@
             color: var(--text-secondary);
         }
 
-        .error-message {
-            background: var(--danger);
-            color: var(--text-primary);
-            padding: 16px;
-            border-radius: 8px;
-            margin: 16px 0;
-            display: none;
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 12px;
         }
 
         @media (max-width: 768px) {
@@ -175,30 +191,68 @@
                 margin-left: 0;
                 height: calc(100vh - 60px);
                 width: 100%;
+                position: fixed;
+                top: 0;
             }
             
             .sidebar {
                 width: 100%;
                 height: 60px;
+                position: fixed;
                 bottom: 0;
                 top: auto;
-                padding: 10px;
+                padding: 10px 20px;
                 overflow: hidden;
-                transition: height 0.3s;
+                transition: all 0.3s ease;
+                z-index: 1500;
             }
             
             .sidebar.expanded {
                 height: 80vh;
                 overflow-y: auto;
             }
+
+            .sidebar h2 {
+                margin: 0;
+                cursor: pointer;
+                position: relative;
+            }
+
+            .sidebar h2:after {
+                content: '\f077';
+                font-family: 'Font Awesome 6 Free';
+                font-weight: 900;
+                position: absolute;
+                right: 10px;
+                transition: transform 0.3s;
+            }
+
+            .sidebar:not(.expanded) h2:after {
+                transform: rotate(180deg);
+            }
+            
+            .radius-control,
+            .stats-panel,
+            .poi-list {
+                display: none;
+            }
+            
+            .sidebar.expanded .radius-control,
+            .sidebar.expanded .stats-panel,
+            .sidebar.expanded .poi-list {
+                display: block;
+                margin-top: 20px;
+            }
             
             .toggle-sidebar {
-                left: 10px !important;
-                top: 70px;
+                display: none;
             }
             
             .legend {
                 bottom: 70px;
+                right: 10px;
+                font-size: 0.9em;
+                padding: 8px;
             }
         }
     </style>
@@ -229,12 +283,8 @@
         <div class="poi-list" id="poi-list"></div>
     </div>
     
-    <button class="toggle-sidebar" id="toggle-sidebar">
-        <i class="fas fa-bars"></i>
-    </button>
-    
     <div id="map"></div>
-    
+
     <div class="legend">
         <div class="legend-item">
             <div class="legend-color" style="background-color: var(--accent); border: 2px solid var(--bg-primary);"></div>
@@ -252,33 +302,26 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script>
-        // Map initialization with dark mode
         const map = L.map('map', {
             zoomControl: false
         }).setView([0, 0], 2);
 
-        // Dark mode map tiles
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '©OpenStreetMap, ©CartoDB',
             subdomains: 'abcd',
             maxZoom: 19
         }).addTo(map);
 
-        // Add zoom control
         L.control.zoom({
             position: 'topright'
         }).addTo(map);
 
-        // State management
         let userMarker = null;
         let accuracyCircle = null;
-        let initialPosition = null;
         let customMarkers = [];
         let poiMarkers = [];
-        let isInLoadingArea = false;
         let searchRadius = 1000;
 
-        // Handle radius slider
         const radiusSlider = document.getElementById('radius-slider');
         const radiusValue = document.getElementById('radius-value');
 
@@ -288,12 +331,12 @@
             if (accuracyCircle) {
                 accuracyCircle.setRadius(searchRadius);
             }
-            if (initialPosition) {
-                loadPOIsIfInRange(initialPosition);
+            if (userMarker) {
+                const pos = userMarker.getLatLng();
+                loadPOIsIfInRange({ lat: pos.lat, lng: pos.lng });
             }
         });
 
-        // Custom marker icons
         const userIcon = L.divIcon({
             className: 'user-marker',
             html: '<div style="background-color: #4285f4; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #1a1a1a; box-shadow: 0 0 0 2px #4285f4;"></div>',
@@ -312,7 +355,6 @@
             iconSize: [18, 18]
         });
 
-        // Fetch POIs using Overpass API
         async function fetchPOIs(center) {
             const query = `
                 [out:json][timeout:25];
@@ -352,13 +394,11 @@
             }
         }
 
-        // Update sidebar counts
         function updateSidebarCounts(pois) {
             document.getElementById('poi-count').textContent = pois ? pois.length : 0;
             document.getElementById('marker-count').textContent = customMarkers.length;
         }
 
-        // Update POI list
         function updatePOIList(pois) {
             const poiList = document.getElementById('poi-list');
             poiList.innerHTML = '<h3><i class="fas fa-glass-martini-alt"></i> Nearby Bars</h3>';
@@ -384,12 +424,14 @@
                         m.getLatLng().lng === poi.lng
                     );
                     if (marker) marker.openPopup();
+                    if (window.innerWidth <= 768) {
+                        document.getElementById('sidebar').classList.remove('expanded');
+                    }
                 };
                 poiList.appendChild(poiElement);
             });
         }
 
-        // Display POIs on map
         function displayPOIs(pois) {
             clearPOIs();
             pois.forEach(poi => {
@@ -406,39 +448,11 @@
             });
         }
 
-        // Clear POIs
         function clearPOIs() {
             poiMarkers.forEach(marker => map.removeLayer(marker));
             poiMarkers = [];
         }
 
-        // Load POIs if in range
-        async function loadPOIsIfInRange(currentPosition) {
-            console.log('Loading POIs for position:', currentPosition);
-            if (!currentPosition) return;
-
-            isInLoadingArea = true;
-            const loading = document.createElement('div');
-            loading.id = 'loading';
-            loading.className = 'loading-overlay';
-            loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding nearby bars...';
-            document.body.appendChild(loading);
-            loading.style.display = 'block';
-            
-            try {
-                const pois = await fetchPOIs(initialPosition);
-                displayPOIs(pois);
-                updatePOIList(pois);
-                updateSidebarCounts(pois);
-            } catch (error) {
-                console.error('Error loading POIs:', error);
-                showError('Failed to load nearby bars');
-            } finally {
-                loading.style.display = 'none';
-            }
-        }
-
-        // Show error message
         function showError(message) {
             const errorDiv = document.getElementById('error-message');
             errorDiv.textContent = message;
@@ -448,12 +462,31 @@
             }, 5000);
         }
 
-        // Handle geolocation
+        async function loadPOIsIfInRange(currentPosition) {
+            if (!currentPosition) return;
+            
+            const loading = document.createElement('div');
+            loading.className = 'loading-overlay';
+            loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding nearby bars...';
+            document.body.appendChild(loading);
+            
+            try {
+                const pois = await fetchPOIs(currentPosition);
+                displayPOIs(pois);
+                updatePOIList(pois);
+                updateSidebarCounts(pois);
+            } catch (error) {
+                console.error('Error loading POIs:', error);
+                showError('Failed to load nearby bars');
+            } finally {
+                loading.remove();
+            }
+        }
+
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     const { latitude, longitude, accuracy } = position.coords;
-                    initialPosition = { lat: latitude, lng: longitude };
 
                     if (userMarker) map.removeLayer(userMarker);
                     userMarker = L.marker([latitude, longitude], { icon: userIcon })
@@ -471,6 +504,18 @@
 
                     map.setView([latitude, longitude], 15);
                     loadPOIsIfInRange({ lat: latitude, lng: longitude });
+
+                    // Watch position for updates
+                    navigator.geolocation.watchPosition(
+                        (newPosition) => {
+                            const { latitude: newLat, longitude: newLng } = newPosition.coords;
+                            userMarker.setLatLng([newLat, newLng]);
+                            accuracyCircle.setLatLng([newLat, newLng]);
+                            loadPOIsIfInRange({ lat: newLat, lng: newLng });
+                        },
+                        null,
+                        { enableHighAccuracy: true }
+                    );
                 },
                 (error) => {
                     showError("Error accessing location: " + error.message);
@@ -480,7 +525,6 @@
             showError("Geolocation is not supported by your browser");
         }
 
-        // Handle map clicks for custom markers
         map.on('click', (e) => {
             if (customMarkers.length >= 20) {
                 showError("Maximum number of custom markers (20) reached!");
@@ -506,7 +550,6 @@
             updateSidebarCounts(poiMarkers.length);
         });
 
-        // Remove custom marker
         function removeMarker(id) {
             const markerIndex = customMarkers.findIndex(m => m.id === id);
             if (markerIndex !== -1) {
@@ -516,23 +559,31 @@
             }
         }
 
-        // Toggle sidebar
         const sidebar = document.getElementById('sidebar');
-        const mapDiv = document.getElementById('map');
-        const toggleButton = document.getElementById('toggle-sidebar');
+        const sidebarTitle = document.querySelector('.sidebar h2');
+        
+        sidebarTitle.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.toggle('expanded');
+                map.invalidateSize();
+            }
+        });
 
-        toggleButton.addEventListener('click', () => {
-            sidebar.classList.toggle('expanded');
-            mapDiv.classList.toggle('map-collapsed');
-            toggleButton.classList.toggle('collapsed');
+        // Handle window resize
+        window.addEventListener('resize', () => {
             map.invalidateSize();
         });
 
-        // Check POIs when map moves
-        map.on('moveend', () => {
-            const center = map.getCenter();
-            loadPOIsIfInRange({ lat: center.lat, lng: center.lng });
+        // Update map when radius changes
+        radiusSlider.addEventListener('change', () => {
+            if (userMarker) {
+                const pos = userMarker.getLatLng();
+                loadPOIsIfInRange({ lat: pos.lat, lng: pos.lng });
+            }
         });
+
+        // Make removeMarker available globally
+        window.removeMarker = removeMarker;
     </script>
 </body>
 </html>
