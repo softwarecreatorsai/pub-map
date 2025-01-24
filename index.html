@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Bar Finder</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #map { 
+            height: 100vh;
+            margin-left: 300px;
+            transition: margin-left 0.3s;
+        }
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            transition: transform 0.3s;
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-300px);
+        }
+        .map-collapsed {
+            margin-left: 0 !important;
+        }
+        .toggle-sidebar {
+            position: fixed;
+            left: 300px;
+            top: 10px;
+            z-index: 1001;
+            background: #1a1a1a;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 0 5px 5px 0;
+            transition: left 0.3s;
+        }
+        .toggle-sidebar.collapsed {
+            left: 0;
+        }
+        .stats-panel {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px;
+            background: #333;
+            border-radius: 4px;
+        }
+        .poi-list {
+            margin-top: 20px;
+        }
+        .poi-item {
+            background: #2a2a2a;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .poi-item:hover {
+            background: #333;
+        }
+        .poi-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .poi-distance {
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 26, 26, 0.9);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        .user-marker {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .legend {
+            background: rgba(26, 26, 26, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+        }
+        .error-message {
+            background: #ff4444;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar" id="sidebar">
+        <h2><i class="fas fa-map-marked-alt"></i> Bar Finder</h2>
+        <div class="stats-panel">
+            <div class="stat-item">
+                <span>Nearby Bars:</span>
+                <span id="poi-count">0</span>
+            </div>
+            <div class="stat-item">
+                <span>Custom Markers:</span>
+                <span id="marker-count">0</span>
+            </div>
+            <div class="stat-item">
+                <span>Search Radius:</span>
+                <span>1km</span>
+            </div>
+        </div>
+        <div class="error-message" id="error-message"></div>
+        <div class="poi-list" id="poi-list"></div>
+    </div>
+    
+    <button class="toggle-sidebar" id="toggle-sidebar">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <div id="map"></div>
+    <div id="loading" class="loading-overlay">
+        <i class="fas fa-spinner fa-spin"></i> Finding nearby bars...
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #2196F3;"></div>
+            <span>Your Location</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #4CAF50;"></div>
+            <span>Bars</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #FF5722;"></div>
+            <span>Custom Markers</span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        // Map initialization
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // State management
+        let userMarker = null;
+        let accuracyCircle = null;
+        let initialPosition = null;
+        let customMarkers = [];
+        let poiMarkers = [];
+        let isInLoadingArea = false;
+
+        // Custom marker icons
+        const userIcon = L.divIcon({
+            className: 'user-marker',
+            html: '<div style="background-color: #2196F3; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white;"></div>',
+            iconSize: [20, 20]
+        });
+
+        const poiIcon = L.divIcon({
+            className: 'poi-marker',
+            html: '<div style="background-color: #4CAF50; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
+            iconSize: [16, 16]
+        });
+
+        const customIcon = L.divIcon({
+            className: 'custom-marker',
+            html: '<div style="background-color: #FF5722; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>',
+            iconSize: [14, 14]
+        });
+
+        // Fetch real POIs using Overpass API
+        async function fetchPOIs(center) {
+            const radius = 1000; // 1km
+            const query = `
+                [out:json][timeout:25];
+                (
+                    node["amenity"="bar"](around:${radius},${center.lat},${center.lng});
+                    way["amenity"="bar"](around:${radius},${center.lat},${center.lng});
+                    relation["amenity"="bar"](around:${radius},${center.lat},${center.lng});
+                );
+                out body;
+                >;
+                out skel qt;
+            `;
+
+            try {
+                const response = await fetch('https://overpass-api.de/api/interpreter', {
+                    method: 'POST',
+                    body: query
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const data = await response.json();
+                
+                return data.elements
+                    .filter(element => element.type === 'node' && element.tags)
+                    .map(element => ({
+                        name: element.tags.name || 'Unnamed Bar',
+                        description: element.tags.description || element.tags.operator || 'Local bar',
+                        lat: element.lat,
+                        lng: element.lon,
+                        imageUrl: '/api/placeholder/150/150',
+                        distance: Math.floor(map.distance(
+                            [center.lat, center.lng], 
+                            [element.lat, element.lon]
+                        ))
+                    }))
+                    .sort((a, b) => a.distance - b.distance);
+            } catch (error) {
+                console.error('Error fetching POIs:', error);
+                showError('Error loading bars. Please try again later.');
+                return [];
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Update sidebar counts
+        function updateSidebarCounts(pois) {
+            document.getElementById('poi-count').textContent = pois ? pois.length : 0;
+            document.getElementById('marker-count').textContent = customMarkers.length;
+        }
+
+        // Update POI list in sidebar
+        function updatePOIList(pois) {
+            const poiList = document.getElementById('poi-list');
+            poiList.innerHTML = '<h3><i class="fas fa-glass-martini-alt"></i> Nearby Bars</h3>';
+            
+            if (!pois || pois.length === 0) {
+                poiList.innerHTML += '<div class="poi-item">No bars found nearby</div>';
+                return;
+            }
+
+            pois.forEach(poi => {
+                const poiElement = document.createElement('div');
+                poiElement.className = 'poi-item';
+                poiElement.innerHTML = `
+                    <div class="poi-name">${poi.name}</div>
+                    <div class="poi-distance">
+                        <i class="fas fa-walking"></i> ${poi.distance}m away
+                    </div>
+                `;
+                poiElement.onclick = () => {
+                    map.setView([poi.lat, poi.lng], 18);
+                    const marker = poiMarkers.find(m => 
+                        m.getLatLng().lat === poi.lat && 
+                        m.getLatLng().lng === poi.lng
+                    );
+                    if (marker) marker.openPopup();
+                };
+                poiList.appendChild(poiElement);
+            });
+        }
+
+        // Display POIs on map
+        function displayPOIs(pois) {
+            clearPOIs();
+            pois.forEach(poi => {
+                const marker = L.marker([poi.lat, poi.lng], { icon: poiIcon })
+                    .bindPopup(`
+                        <h3>${poi.name}</h3>
+                        <p>${poi.description}</p>
+                        <p><i class="fas fa-walking"></i> ${poi.distance}m away</p>
+                        <img src="${poi.imageUrl}" alt="${poi.name}" style="width:150px;height:150px;">
+                    `);
+                poiMarkers.push(marker);
+                marker.addTo(map);
+            });
+        }
+
+        // Clear POIs from map
+        function clearPOIs() {
+            poiMarkers.forEach(marker => map.removeLayer(marker));
+            poiMarkers = [];
+        }
+
+        // Check distance and load POIs
+        async function loadPOIsIfInRange(currentPosition) {
+            if (!initialPosition) return;
+
+            const distance = map.distance(
+                [currentPosition.lat, currentPosition.lng],
+                [initialPosition.lat, initialPosition.lng]
+            );
+
+            const shouldBeInLoadingArea = distance <= 1000;
+
+            if (shouldBeInLoadingArea !== isInLoadingArea) {
+                isInLoadingArea = shouldBeInLoadingArea;
+                
+                if (shouldBeInLoadingArea) {
+                    const loading = document.getElementById('loading');
+                    loading.style.display = 'block';
+                    
+                    try {
+                        const pois = await fetchPOIs(initialPosition);
+                        displayPOIs(pois);
+                        updatePOIList(pois);
+                        updateSidebarCounts(pois);
+                    } catch (error) {
+                        console.error('Error loading POIs:', error);
+                        showError('Failed to load nearby bars');
+                    } finally {
+                        loading.style.display = 'none';
+                    }
+                } else {
+                    clearPOIs();
+                    updatePOIList(null);
+                    updateSidebarCounts(null);
+                }
+            }
+        }
+
+        // Handle geolocation
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    initialPosition = { lat: latitude, lng: longitude };
+
+                    if (userMarker) {
+                        map.removeLayer(userMarker);
+                    }
+                    userMarker = L.marker([latitude, longitude], { icon: userIcon })
+                        .bindPopup("You are here!")
+                        .addTo(map);
+
+                    if (accuracyCircle) {
+                        map.removeLayer(accuracyCircle);
+                    }
+                    accuracyCircle = L.circle([latitude, longitude], {
+                        radius: accuracy,
+                        fillColor: '#2196F3',
+                        fillOpacity: 0.1,
+                        color: '#2196F3',
+                        opacity: 0.2
+                    }).addTo(map);
+
+                    map.setView([latitude, longitude], 15);
+                    loadPOIsIfInRange({ lat: latitude, lng: longitude });
+                },
+                (error) => {
+                    showError("Error accessing location: " + error.message);
+                }
+            );
+        } else {
+            showError("Geolocation is not supported by your browser");
+        }
+
+        // Handle map clicks for custom markers
+        map.on('click', (e) => {
+            if (customMarkers.length >= 20) {
+                showError("Maximum number of custom markers (20) reached!");
+                return;
+            }
+
+            const marker = L.marker(e.latlng, { icon: customIcon })
+                .bindPopup(`
+                    <h3>Custom Marker</h3>
+                    <button onclick="removeMarker('${e.latlng.lat}-${e.latlng.lng}')">
+                        Remove Marker
+                    </button>
+                `);
+            
+            customMarkers.push({
+                id: `${e.latlng.lat}-${e.latlng.lng}`,
+                marker: marker
+            });
+            
+            marker.addTo(map);
+            updateSidebarCounts(poiMarkers.length);
+        });
+
+        // Remove custom marker
+        function removeMarker(id) {
+            const markerIndex = customMarkers.findIndex(m => m.id === id);
+            if (markerIndex !== -1) {
+                map.removeLayer(customMarkers[markerIndex].marker);
+                customMarkers.splice(markerIndex, 1);
+                updateSidebarCounts(poiMarkers.length);
+            }
+        }
+
+        // Toggle sidebar
+        const sidebar = document.getElementById('sidebar');
+        const mapDiv = document.getElementById('map');
+        const toggleButton = document.getElementById('toggle-sidebar');
+
+        toggleButton.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            mapDiv.classList.toggle('map-collapsed');
+            toggleButton.classList.toggle('collapsed');
+        });
+
+        // Check POIs when map moves
+        map.on('moveend', () => {
+            const center = map.getCenter();
+            loadPOIsIfInRange({ lat: center.lat, lng: center.lng });
+        });
+    </script>
+</body>
+</html>
