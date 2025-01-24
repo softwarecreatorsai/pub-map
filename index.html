@@ -3,142 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-time Bar Finder</title>
+    <title>Bar Finder</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
     <style>
         body { 
             margin: 0; 
             padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Roboto', 'Arial', sans-serif;
+            color: #333;
         }
         #map { 
             height: 100vh;
-            margin-left: 300px;
+            margin-left: 400px;
             transition: margin-left 0.3s;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
         }
         .sidebar {
             position: fixed;
             left: 0;
             top: 0;
-            width: 300px;
+            width: 400px;
             height: 100vh;
-            background: #1a1a1a;
-            color: white;
-            padding: 20px;
+            background: #fff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 24px;
             box-sizing: border-box;
             overflow-y: auto;
             transition: transform 0.3s;
             z-index: 1000;
         }
+        .sidebar h2 {
+            color: #1a73e8;
+            margin: 0 0 24px 0;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
         .sidebar.collapsed {
-            transform: translateX(-300px);
+            transform: translateX(-400px);
         }
         .map-collapsed {
             margin-left: 0 !important;
         }
         .toggle-sidebar {
             position: fixed;
-            left: 300px;
-            top: 10px;
+            left: 400px;
+            top: 20px;
             z-index: 1001;
-            background: #1a1a1a;
-            color: white;
+            background: #fff;
+            color: #666;
             border: none;
-            padding: 10px;
+            padding: 12px;
             cursor: pointer;
-            border-radius: 0 5px 5px 0;
+            border-radius: 0 4px 4px 0;
+            box-shadow: 4px 0 8px rgba(0,0,0,0.1);
             transition: left 0.3s;
         }
         .toggle-sidebar.collapsed {
             left: 0;
         }
         .stats-panel {
-            background: #2a2a2a;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 24px;
         }
         .stat-item {
             display: flex;
             justify-content: space-between;
-            margin: 10px 0;
-            padding: 8px;
-            background: #333;
-            border-radius: 4px;
+            margin: 12px 0;
+            padding: 12px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .poi-list {
-            margin-top: 20px;
+            margin-top: 24px;
         }
         .poi-item {
-            background: #2a2a2a;
-            padding: 12px;
-            margin: 8px 0;
-            border-radius: 6px;
+            background: #fff;
+            padding: 16px;
+            margin: 12px 0;
+            border-radius: 12px;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            border: 1px solid #eee;
         }
         .poi-item:hover {
-            background: #333;
+            background: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
         }
         .poi-name {
-            font-weight: bold;
-            margin-bottom: 5px;
+            font-weight: 500;
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #1a73e8;
         }
         .poi-distance {
-            font-size: 0.9em;
-            color: #aaa;
+            font-size: 14px;
+            color: #5f6368;
         }
         .loading-overlay {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(26, 26, 26, 0.9);
-            color: white;
-            padding: 20px 40px;
-            border-radius: 8px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            background: rgba(255, 255, 255, 0.95);
+            color: #1a73e8;
+            padding: 24px 48px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
             z-index: 1000;
             display: none;
+            font-weight: 500;
         }
         .user-marker {
             animation: pulse 2s infinite;
         }
         @keyframes pulse {
             0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.2); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 0.7; }
             100% { transform: scale(1); opacity: 1; }
         }
         .legend {
-            background: rgba(26, 26, 26, 0.9);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
+            background: #fff;
+            padding: 16px;
+            border-radius: 12px;
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: 24px;
+            right: 24px;
             z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .legend-item {
             display: flex;
             align-items: center;
-            margin: 5px 0;
+            margin: 8px 0;
+            color: #5f6368;
         }
         .legend-color {
-            width: 15px;
-            height: 15px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
-            margin-right: 10px;
-            border: 2px solid white;
+            margin-right: 12px;
         }
         .error-message {
-            background: #ff4444;
-            color: white;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
+            background: #fdeded;
+            color: #5f6364;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
             display: none;
+            border-left: 4px solid #d93025;
+        }
+
+        /* Leaflet Custom Styles */
+        .leaflet-control-zoom {
+            border: none !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+        }
+        .leaflet-control-zoom a {
+            background: #fff !important;
+            color: #666 !important;
+            border: none !important;
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        }
+        .leaflet-popup-content {
+            margin: 16px !important;
+            font-family: 'Roboto', 'Arial', sans-serif !important;
+        }
+        .leaflet-popup-content h3 {
+            color: #1a73e8;
+            margin: 0 0 8px 0;
+        }
+        .leaflet-popup-content p {
+            margin: 8px 0;
+            color: #5f6368;
+        }
+        .leaflet-popup-tip {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
         }
     </style>
 </head>
@@ -147,15 +196,15 @@
         <h2><i class="fas fa-map-marked-alt"></i> Bar Finder</h2>
         <div class="stats-panel">
             <div class="stat-item">
-                <span>Nearby Bars:</span>
+                <span>Nearby Bars</span>
                 <span id="poi-count">0</span>
             </div>
             <div class="stat-item">
-                <span>Custom Markers:</span>
+                <span>Custom Markers</span>
                 <span id="marker-count">0</span>
             </div>
             <div class="stat-item">
-                <span>Search Radius:</span>
+                <span>Search Radius</span>
                 <span>1km</span>
             </div>
         </div>
@@ -169,30 +218,43 @@
     
     <div id="map"></div>
     <div id="loading" class="loading-overlay">
-        <i class="fas fa-spinner fa-spin"></i> Finding nearby bars...
+        <i class="fas fa-spinner fa-spin"></i>&nbsp; Finding nearby bars...
     </div>
     
     <div class="legend">
         <div class="legend-item">
-            <div class="legend-color" style="background-color: #2196F3;"></div>
+            <div class="legend-color" style="background-color: #1a73e8; border: 2px solid #fff; box-shadow: 0 0 0 2px #1a73e8;"></div>
             <span>Your Location</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color" style="background-color: #4CAF50;"></div>
+            <div class="legend-color" style="background-color: #34a853; border: 2px solid #fff; box-shadow: 0 0 0 2px #34a853;"></div>
             <span>Bars</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color" style="background-color: #FF5722;"></div>
+            <div class="legend-color" style="background-color: #ea4335; border: 2px solid #fff; box-shadow: 0 0 0 2px #ea4335;"></div>
             <span>Custom Markers</span>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script>
-        // Map initialization
-        const map = L.map('map').setView([0, 0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
+        // Map initialization with custom style
+        const map = L.map('map', {
+            zoomControl: false
+        }).setView([0, 0], 2);
+        
+        // Custom map style using Mapbox
+        L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+            attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            id: 'mapbox/streets-v11',
+            accessToken: 'YOUR_MAPBOX_TOKEN', // Replace with your token
+            tileSize: 512,
+            zoomOffset: -1
+        }).addTo(map);
+
+        // Add zoom control to top right
+        L.control.zoom({
+            position: 'topright'
         }).addTo(map);
 
         // State management
@@ -203,23 +265,23 @@
         let poiMarkers = [];
         let isInLoadingArea = false;
 
-        // Custom marker icons
+        // Custom marker icons with updated colors
         const userIcon = L.divIcon({
             className: 'user-marker',
-            html: '<div style="background-color: #2196F3; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white;"></div>',
-            iconSize: [20, 20]
+            html: '<div style="background-color: #1a73e8; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 2px #1a73e8;"></div>',
+            iconSize: [22, 22]
         });
 
         const poiIcon = L.divIcon({
             className: 'poi-marker',
-            html: '<div style="background-color: #4CAF50; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
-            iconSize: [16, 16]
+            html: '<div style="background-color: #34a853; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 2px #34a853;"></div>',
+            iconSize: [20, 20]
         });
 
         const customIcon = L.divIcon({
             className: 'custom-marker',
-            html: '<div style="background-color: #FF5722; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>',
-            iconSize: [14, 14]
+            html: '<div style="background-color: #ea4335; width: 12px; height: 12px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 2px #ea4335;"></div>',
+            iconSize: [18, 18]
         });
 
         // Fetch real POIs using Overpass API
